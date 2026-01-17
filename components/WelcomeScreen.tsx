@@ -84,7 +84,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ t, onComplete }) => {
                 className="mb-4"
               >
                 <h1 className="text-5xl font-bold font-mono tracking-tight mb-2 text-zinc-900 dark:text-white dark:retro-glow">
-                  FocusFlow
+                  Nextly
                   <span className={`inline-block w-1 h-12 ml-2 bg-emerald-600 dark:bg-terminal-green ${showCursor ? 'opacity-100' : 'opacity-0'} transition-opacity`} />
                 </h1>
                 <p className="text-sm text-zinc-500 dark:text-zinc-500 uppercase tracking-[0.3em] font-bold">

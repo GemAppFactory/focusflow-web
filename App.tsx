@@ -7,11 +7,16 @@ import Analytics from './views/Analytics';
 import Settings from './views/Settings';
 import HistoryView from './views/HistoryView';
 import AssistantView from './views/AssistantView';
+import ProfileView from './views/ProfileView';
 import CommandPalette from './components/CommandPalette';
 import IdleOverlay from './components/IdleOverlay';
 import WelcomeScreen from './components/WelcomeScreen';
+import LoginButton from './components/LoginButton';
 import { ViewType, TaskStatus, Task, Language, Theme, TaskPriority } from './types';
 import { locales } from './locales';
+import { useAuth } from './contexts/AuthContext';
+import { subscribeToTasks, saveTask, deleteTask as deleteTaskFromFirestore, subscribeToSettings, saveUserSettings } from './services/firestoreService';
+import { initializeUserProfile } from './services/profileService';
 
 interface AIMessage {
   role: 'user' | 'assistant' | 'task-notification';
@@ -25,6 +30,7 @@ const INITIAL_TASKS: Task[] = [
 ];
 
 const App: React.FC = () => {
+  const { user, loading: authLoading } = useAuth();
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [status, setStatus] = useState<TaskStatus>(TaskStatus.IDLE);
   const [currentTask, setCurrentTask] = useState<Task | null>(null);
@@ -35,7 +41,7 @@ const App: React.FC = () => {
   const [idleElapsedTime, setIdleElapsedTime] = useState<number>(0);
   const [language, setLanguage] = useState<Language>('en');
   const [theme, setTheme] = useState<Theme>('dark');
-  const [savedTasks, setSavedTasks] = useState<Task[]>(INITIAL_TASKS);
+  const [savedTasks, setSavedTasks] = useState<Task[]>([]);
   const [showWelcome, setShowWelcome] = useState<boolean>(() => {
     const hasSeenWelcome = localStorage.getItem('focusflow_welcome_seen');
     return !hasSeenWelcome;
@@ -46,6 +52,65 @@ const App: React.FC = () => {
   const [assistantHistory, setAssistantHistory] = useState<any[]>([]);
 
   const t = locales[language];
+
+  // Subscribe to Firestore tasks when user is logged in
+  useEffect(() => {
+    if (!user) {
+      // Load from localStorage when not logged in
+      const localTasks = localStorage.getItem('focusflow_tasks');
+      if (localTasks) {
+        setSavedTasks(JSON.parse(localTasks));
+      } else {
+        setSavedTasks(INITIAL_TASKS);
+      }
+      return;
+    }
+
+    // Initialize user profile on first login
+    initializeUserProfile(
+      user.uid,
+      user.email || '',
+      user.displayName || '',
+      user.photoURL || ''
+    );
+
+    // Subscribe to Firestore when logged in
+    const unsubscribe = subscribeToTasks(user.uid, (tasks) => {
+      setSavedTasks(tasks);
+    });
+
+    return unsubscribe;
+  }, [user]);
+
+  // Subscribe to user settings
+  useEffect(() => {
+    if (!user) {
+      // Load from localStorage when not logged in
+      const localLang = localStorage.getItem('focusflow_language') as Language;
+      const localTheme = localStorage.getItem('focusflow_theme') as Theme;
+      if (localLang) setLanguage(localLang);
+      if (localTheme) setTheme(localTheme);
+      return;
+    }
+
+    // Subscribe to Firestore settings when logged in
+    const unsubscribe = subscribeToSettings(user.uid, (settings) => {
+      if (settings.language) setLanguage(settings.language);
+      if (settings.theme) setTheme(settings.theme);
+    });
+
+    return unsubscribe;
+  }, [user]);
+
+  // Save settings to Firestore or localStorage
+  useEffect(() => {
+    if (user) {
+      saveUserSettings(user.uid, { language, theme });
+    } else {
+      localStorage.setItem('focusflow_language', language);
+      localStorage.setItem('focusflow_theme', theme);
+    }
+  }, [language, theme, user]);
 
   // Auto-generate task tag and color based on task name
   const generateTaskTag = (taskName: string): { tag: string; tagColor: string } => {
@@ -112,14 +177,20 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [status]);
 
-  // Sync timer to task state
+  // Sync timer to task state and save to Firestore
   useEffect(() => {
     if (currentTask && status !== TaskStatus.IDLE) {
+      const updatedTask = { ...currentTask, duration: timer, lastActive: Date.now() };
       setSavedTasks(prev => prev.map(t =>
-        t.id === currentTask.id ? { ...t, duration: timer, lastActive: Date.now() } : t
+        t.id === currentTask.id ? updatedTask : t
       ));
+
+      // Save to Firestore if user is logged in
+      if (user) {
+        saveTask(user.uid, updatedTask);
+      }
     }
-  }, [timer, status]);
+  }, [timer, status, user]);
 
   // Sync state to localStorage for menubar window
   useEffect(() => {
@@ -240,10 +311,25 @@ const App: React.FC = () => {
       completed: false
     };
     setSavedTasks(prev => [newTask, ...prev]);
+
+    // Save to Firestore if user is logged in
+    if (user) {
+      saveTask(user.uid, newTask);
+    }
   };
 
   const handleToggleCompleteTask = (id: string) => {
-    setSavedTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+    setSavedTasks(prev => prev.map(t => {
+      if (t.id === id) {
+        const updated = { ...t, completed: !t.completed };
+        // Save to Firestore if user is logged in
+        if (user) {
+          saveTask(user.uid, updated);
+        }
+        return updated;
+      }
+      return t;
+    }));
     if (currentTask?.id === id) {
       handleStopTimer();
     }
@@ -290,6 +376,10 @@ const App: React.FC = () => {
 
   const handleDeleteTask = (id: string) => {
     setSavedTasks(prev => prev.filter(t => t.id !== id));
+    // Delete from Firestore if user is logged in
+    if (user) {
+      deleteTaskFromFirestore(user.uid, id);
+    }
     // If deleting current task, stop it
     if (currentTask?.id === id) {
       handleStopTimer();
@@ -297,7 +387,17 @@ const App: React.FC = () => {
   };
 
   const handleUpdateTask = (id: string, updates: Partial<Task>) => {
-    setSavedTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    setSavedTasks(prev => prev.map(t => {
+      if (t.id === id) {
+        const updated = { ...t, ...updates };
+        // Save to Firestore if user is logged in
+        if (user) {
+          saveTask(user.uid, updated);
+        }
+        return updated;
+      }
+      return t;
+    }));
     // If updating current task, update it as well
     if (currentTask?.id === id) {
       setCurrentTask(prev => prev ? { ...prev, ...updates } : null);
@@ -375,9 +475,14 @@ const App: React.FC = () => {
 
       <div className="relative h-screen w-screen overflow-hidden flex bg-background-light dark:bg-background-dark text-zinc-900 dark:text-zinc-100 selection:bg-blue-500/30">
       <div className={`absolute inset-0 transition-opacity duration-1000 pointer-events-none opacity-10 ${
-        status === TaskStatus.FOCUSING ? 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.3)_0%,_transparent_70%)]' : 
+        status === TaskStatus.FOCUSING ? 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.3)_0%,_transparent_70%)]' :
         status === TaskStatus.PAUSED ? 'bg-[radial-gradient(circle_at_center,_rgba(245,158,11,0.2)_0%,_transparent_70%)]' : ''
       }`} />
+
+      {/* Login Button - Top Right */}
+      <div className="absolute top-6 right-6 z-50">
+        <LoginButton t={t} onProfileClick={() => setCurrentView('profile')} />
+      </div>
 
       <Sidebar activeView={currentView} onViewChange={setCurrentView} onShowWelcome={handleResetWelcome} t={t} />
 
@@ -416,6 +521,9 @@ const App: React.FC = () => {
               onReset={handleResetAssistant}
               onTasksAdded={handleAddTasksFromAI}
             />
+          )}
+          {currentView === 'profile' && (
+            <ProfileView key="profile" t={t} />
           )}
           {currentView === 'settings' && (
             <Settings

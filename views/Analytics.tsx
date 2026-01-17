@@ -11,14 +11,47 @@ import { formatTime } from '../utils';
 const Analytics: React.FC<{ history: Task[], t: Locales }> = ({ history, t }) => {
   const [aiAdvice, setAiAdvice] = useState<string>('Analyzing your work patterns...');
   const [isMounted, setIsMounted] = useState(false);
+  const [lastInsightUpdate, setLastInsightUpdate] = useState<number>(0);
 
   useEffect(() => {
     setIsMounted(true);
+
     const fetchInsights = async () => {
-      const insight = await getFocusInsights(history);
-      setAiAdvice(insight);
+      const now = Date.now();
+      const twoHours = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
+
+      // Check if we need to update (first load or 2 hours passed)
+      if (lastInsightUpdate === 0 || now - lastInsightUpdate >= twoHours) {
+        const insight = await getFocusInsights(history);
+        setAiAdvice(insight);
+        setLastInsightUpdate(now);
+        // Store in localStorage to persist across page reloads
+        localStorage.setItem('ai_insight', insight);
+        localStorage.setItem('ai_insight_timestamp', now.toString());
+      }
     };
-    fetchInsights();
+
+    // Load from localStorage on mount
+    const savedInsight = localStorage.getItem('ai_insight');
+    const savedTimestamp = localStorage.getItem('ai_insight_timestamp');
+
+    if (savedInsight && savedTimestamp) {
+      const timestamp = parseInt(savedTimestamp);
+      const now = Date.now();
+      const twoHours = 2 * 60 * 60 * 1000;
+
+      if (now - timestamp < twoHours) {
+        // Use cached insight if less than 2 hours old
+        setAiAdvice(savedInsight);
+        setLastInsightUpdate(timestamp);
+      } else {
+        // Fetch new insight if cache expired
+        fetchInsights();
+      }
+    } else {
+      // No cache, fetch new insight
+      fetchInsights();
+    }
   }, [history]);
 
   const totalSeconds = history.reduce((acc, task) => acc + task.duration, 0);
@@ -42,23 +75,23 @@ const Analytics: React.FC<{ history: Task[], t: Locales }> = ({ history, t }) =>
     return colorMap[tailwindClass] || '#6b7280'; // Default to gray
   };
 
-  // Calculate actual task distribution by tag
-  const tagStats: { [key: string]: { duration: number; color: string } } = {};
+  // Calculate actual task distribution by task name
+  const taskStats: { [key: string]: { duration: number; color: string } } = {};
   history.forEach(task => {
-    if (!tagStats[task.tag]) {
-      tagStats[task.tag] = { duration: 0, color: task.tagColor };
+    if (!taskStats[task.name]) {
+      taskStats[task.name] = { duration: 0, color: task.tagColor };
     }
-    tagStats[task.tag].duration += task.duration;
+    taskStats[task.name].duration += task.duration;
   });
 
-  const chartData: AnalyticsData[] = Object.entries(tagStats)
-    .map(([tag, stats]) => ({
-      category: tag,
+  const chartData: AnalyticsData[] = Object.entries(taskStats)
+    .map(([taskName, stats]) => ({
+      category: taskName,
       value: totalSeconds > 0 ? Math.round((stats.duration / totalSeconds) * 100) : 0,
       color: getHexColor(stats.color)
     }))
     .sort((a, b) => b.value - a.value)
-    .slice(0, 6); // Top 6 categories
+    .slice(0, 6); // Top 6 tasks
 
   // Calculate efficiency (tasks completed vs started)
   const completedTasks = history.filter(t => t.completed).length;
@@ -136,13 +169,13 @@ const Analytics: React.FC<{ history: Task[], t: Locales }> = ({ history, t }) =>
               </ResponsiveContainer>
             )}
           </div>
-          <div className="flex justify-around mt-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-4">
             {chartData.map((d, i) => (
-              <div key={i} className="text-center">
-                <p className="text-[8px] uppercase font-bold text-zinc-500 mb-1">{d.category}</p>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: d.color }} />
-                  <span className="text-xs font-semibold">{d.value}%</span>
+              <div key={i} className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium truncate" title={d.category}>{d.category}</p>
+                  <p className="text-[10px] text-zinc-500">{d.value}%</p>
                 </div>
               </div>
             ))}

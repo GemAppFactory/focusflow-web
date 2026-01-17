@@ -1,4 +1,6 @@
-# FocusFlow Web
+# Nextly
+
+**Deep Work. Simplified.**
 
 A minimalist productivity tool designed for developers and deep thinkers. Track your focus, analyze your patterns, and optimize your workflow.
 

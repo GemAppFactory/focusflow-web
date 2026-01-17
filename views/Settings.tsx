@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Globe, Moon, Sun, Info, ChevronRight, ChevronDown, Cpu, Check, Download, Eye } from 'lucide-react';
+import { Globe, Moon, Sun, Info, ChevronDown, Cpu, Check, Download, Eye } from 'lucide-react';
 import { Language, Theme, Task } from '../types';
 import { Locales } from '../locales';
 import { formatTime } from '../utils';
@@ -188,6 +188,13 @@ const Settings: React.FC<SettingsProps> = ({ t, language, theme, tasks, onLangua
                       placeholder={t.settings.modelPlaceholder}
                       className="w-full px-3 py-2 rounded-lg bg-black/[0.02] dark:bg-white/[0.05] border border-black/5 dark:border-white/10 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all font-mono"
                     />
+                  </div>
+
+                  {/* Privacy Notice */}
+                  <div className="mt-3 p-2.5 bg-amber-500/5 border border-amber-500/20 rounded-lg">
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 leading-relaxed">
+                      <span className="font-semibold">🔒 {t.settings.privacyNotice || 'Privacy Notice'}:</span> {t.settings.localStorageNote || 'Your API key is stored locally in your browser only and never sent to our servers.'}
+                    </p>
                   </div>
 
                   <button

@@ -26,4 +26,13 @@ export interface AnalyticsData {
   color: string;
 }
 
-export type ViewType = 'dashboard' | 'analytics' | 'history' | 'assistant' | 'settings';
+export type ViewType = 'dashboard' | 'analytics' | 'history' | 'assistant' | 'settings' | 'profile';
+
+export interface UserProfile {
+  uid: string;
+  displayName: string;
+  email: string;
+  photoURL: string;
+  bio?: string;
+  updatedAt: number;
+}
