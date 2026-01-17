@@ -9,9 +9,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: 'FocusFlow',
-        short_name: 'FocusFlow',
-        description: 'A minimalist productivity tool designed for developers and deep thinkers',
+        name: 'Nextly',
+        short_name: 'Nextly',
+        description: 'Deep Work. Simplified. A minimalist productivity tool designed for developers and deep thinkers',
         theme_color: '#0a0e0a',
         background_color: '#0a0e0a',
         display: 'standalone',
