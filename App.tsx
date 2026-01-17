@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './views/Dashboard';
 import Analytics from './views/Analytics';
@@ -441,6 +442,8 @@ const App: React.FC = () => {
         {isIdle && <IdleOverlay t={t} onResolve={handleIdleResolve} idleTime={idleElapsedTime} />}
       </AnimatePresence>
     </div>
+
+    <SpeedInsights />
     </>
   );
 };
